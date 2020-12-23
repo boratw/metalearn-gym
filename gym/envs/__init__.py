@@ -53,7 +53,7 @@ register(
 register(
     id='CartPole-v0',
     entry_point='gym.envs.classic_control:CartPoleEnv',
-    max_episode_steps=200,
+    max_episode_steps=500,
     reward_threshold=195.0,
 )
 
@@ -61,6 +61,20 @@ register(
     id='CartPole-v1',
     entry_point='gym.envs.classic_control:CartPoleEnv',
     max_episode_steps=500,
+    reward_threshold=475.0,
+)
+
+register(
+    id='CartPoleGoal-v0',
+    entry_point='gym.envs.classic_control:CartPoleGoalEnv',
+    max_episode_steps=500,
+    reward_threshold=475.0,
+)
+
+register(
+    id='CartPoleHead-v0',
+    entry_point='gym.envs.classic_control:CartPoleHeadEnv',
+    max_episode_steps=1000,
     reward_threshold=475.0,
 )
 
@@ -89,6 +103,13 @@ register(
     entry_point='gym.envs.classic_control:AcrobotEnv',
     reward_threshold=-100.0,
     max_episode_steps=500,
+)
+
+register(
+    id='AcrobotReach-v1',
+    entry_point='gym.envs.classic_control:AcrobotReachEnv',
+    reward_threshold=-100.0,
+    max_episode_steps=1000,
 )
 
 # Box2d

@@ -11,7 +11,7 @@ from gym.utils import seeding
 import numpy as np
 
 
-class CartPoleEnv(gym.Env):
+class CartPoleGoalEnv(gym.Env):
     """
     Description:
         A pole is attached by an un-actuated joint to a cart, which moves along
@@ -60,22 +60,22 @@ class CartPoleEnv(gym.Env):
 
     metadata = {
         'render.modes': ['human', 'rgb_array'],
-        'video.frames_per_second': 120
+        'video.frames_per_second': 50
     }
 
     def __init__(self):
-        self.gravity = 9.8
-        self.masscart = 0.5
-        self.masspole = 0.05
+        self.gravity = 9.8 * 0.5
+        self.masscart = 1.0
+        self.masspole = 0.1
         self.total_mass = (self.masspole + self.masscart)
         self.length = 0.5  # actually half the pole's length
         self.polemass_length = (self.masspole * self.length)
-        self.force_mag = 20.0
+        self.force_mag = 5.0
         self.tau = 0.02  # seconds between state updates
         self.kinematics_integrator = 'euler'
 
         # Angle at which to fail the episode
-        self.theta_threshold_radians = 30 * 2 * math.pi / 360
+        self.theta_threshold_radians = 45 * 2 * math.pi / 360
         self.x_threshold = 4
 
         # Angle limit set to 2 * theta_threshold_radians so failing observation
@@ -86,7 +86,7 @@ class CartPoleEnv(gym.Env):
                          np.finfo(np.float32).max],
                         dtype=np.float32)
 
-        self.action_space = spaces.Discrete(3)
+        self.action_space = spaces.Discrete(5)
         self.observation_space = spaces.Box(-high, high, dtype=np.float32)
 
         self.seed()
@@ -94,6 +94,8 @@ class CartPoleEnv(gym.Env):
         self.state = None
 
         self.steps_beyond_done = None
+
+        self.goal = 0.
 
 
     def seed(self, seed=None):
@@ -106,11 +108,15 @@ class CartPoleEnv(gym.Env):
 
         x, x_dot, theta, theta_dot = self.state
         if action == 0:
-            force = -self.force_mag
+            force = -self.force_mag * 4
         elif action == 1:
+            force = -self.force_mag
+        elif action == 2:
             force = 0.
-        else:
+        elif action == 3:
             force = self.force_mag
+        else:
+            force = self.force_mag * 4
 
 
 
@@ -144,11 +150,11 @@ class CartPoleEnv(gym.Env):
         )
 
         if not done:
-            reward = 1.0
+            reward = 0.1 + 5.0 / ((self.goal - x) ** 2 + 1.0)
         elif self.steps_beyond_done is None:
             # Pole just fell!
             self.steps_beyond_done = 0
-            reward = -10.0
+            reward = 0.
         else:
             if self.steps_beyond_done == 0:
                 logger.warn(
@@ -165,8 +171,10 @@ class CartPoleEnv(gym.Env):
     def reset(self):
         self.state = self.np_random.uniform(low=-0.05, high=0.05, size=(4,))
         self.steps_beyond_done = None
-        self.random_force = 0
         return np.array(self.state)
+
+    def set_goal(self, goal):
+        self.goal = goal
 
     def render(self, mode='human'):
         screen_width = 1200
@@ -207,6 +215,12 @@ class CartPoleEnv(gym.Env):
 
             self._pole_geom = pole
 
+            self.goaltrans = rendering.Transform()
+            self.goalpoint = rendering.make_circle(polewidth)
+            self.goalpoint.add_attr(self.goaltrans)
+            self.goalpoint.set_color(1., 0., 0.)
+            self.viewer.add_geom(self.goalpoint)
+
         if self.state is None:
             return None
 
@@ -219,6 +233,7 @@ class CartPoleEnv(gym.Env):
         cartx = x[0] * scale + screen_width / 2.0  # MIDDLE OF CART
         self.carttrans.set_translation(cartx, carty)
         self.poletrans.set_rotation(-x[2])
+        self.goaltrans.set_translation(self.goal * scale + screen_width / 2.0, carty)
 
         return self.viewer.render(return_rgb_array=mode == 'rgb_array')
 
