@@ -39,3 +39,4 @@ tutorial/*.html
 vizdoom.ini
 
 data/
+mujoco_learn/data/

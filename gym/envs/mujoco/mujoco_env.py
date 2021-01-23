@@ -1,6 +1,7 @@
 from collections import OrderedDict
 import os
 
+import glfw
 
 from gym import error, spaces
 from gym.utils import seeding
@@ -124,6 +125,14 @@ class MujocoEnv(gym.Env):
         for _ in range(n_frames):
             self.sim.step()
 
+
+    def get_viewer(self):
+        if self.viewer is None:
+            self.viewer = MjViewer()
+            self.viewer.start()
+            self.viewer.set_model(self.model)
+        return self.viewer
+
     def render(self,
                mode='human',
                width=DEFAULT_SIZE,
@@ -176,6 +185,7 @@ class MujocoEnv(gym.Env):
             self.viewer_setup()
             self._viewers[mode] = self.viewer
         return self.viewer
+    
 
     def get_body_com(self, body_name):
         return self.data.get_body_xpos(body_name)
