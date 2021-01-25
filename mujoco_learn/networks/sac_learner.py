@@ -5,7 +5,6 @@ import tensorflow as tf
 from .mlp import MLP
 from .gaussian_policy import GaussianPolicy
 
-EPS = -1e-3
 
 class SACLearner:
     def __init__(self, state_len, action_len, 
@@ -78,11 +77,15 @@ class SACLearner:
         output = sess.run(self.policy_network.squashed_mu, {self.input_state : np.array([input_state])})
         return output
 
-    def get_action_uniform(self, input_state):
+    def get_action_stochastic(self, input_state):
         sess = tf.get_default_session()
         output = sess.run(self.policy_network.squashed_walk, {self.input_state : np.array([input_state])})
         return output
 
+    def get_action_stochastic_batch(self, input_state):
+        sess = tf.get_default_session()
+        output = sess.run(self.policy_network.squashed_walk, {self.input_state : np.array(input_state)})
+        return output
 
     def optimize(self, input_state, input_next_state, input_action, input_reward, input_survive):
         input_list = {self.input_state : np.array([input_state]), self.input_next_state : np.array([input_next_state]), 
