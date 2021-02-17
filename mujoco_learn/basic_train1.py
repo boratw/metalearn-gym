@@ -5,18 +5,19 @@ import random
 import gym.envs.mujoco  
 import time
 from gym.envs.mujoco.ant import AntEnv
+from dummyenv import DummyEnv
 
 from networks.sac_learner import SACLearner
 
-env = AntEnv()
+env = DummyEnv()
 state_dim = env.get_current_obs().size
 action_dim = env.action_space.shape[0]
 
 print("state_dim", state_dim)
 print("action_dim", action_dim)
 
-LOG_DIR = "data/basic_train3/"
-log_file = open(LOG_DIR + "log3.txt", "wt")
+LOG_DIR = "data/basic_dummy1/"
+log_file = open(LOG_DIR + "log.txt", "wt")
 
 learner = SACLearner(state_dim, action_dim)
 
@@ -80,7 +81,7 @@ with sess.as_default():
                 prev_state = state
 
                 state_vector.append(state)
-                action = learner.get_action_uniform(state)[0]
+                action = learner.get_action_stochastic(state)[0]
                 state, reward, done, _ = env.step(action)
                 
                 action_vector.append(action)
@@ -158,7 +159,7 @@ with sess.as_default():
             "\tValue\t" + str(np.mean(vs)) + "\t" + str(np.std(vs)) +
             "\tPolicy_Pi\t" + str(np.mean(ps)) + "\t" + str(np.std(ps)) +"\n")
         if epoch % 100 == 0:
-            saver.save(sess, LOG_DIR + "log2_" + str(epoch) + ".ckpt")
+            saver.save(sess, LOG_DIR + "log_" + str(epoch) + ".ckpt")
 
 
 env.close()

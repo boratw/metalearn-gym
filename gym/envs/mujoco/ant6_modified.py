@@ -2,23 +2,21 @@ import numpy as np
 from gym import utils
 from gym.envs.mujoco import mujoco_env
 
-class AntEnv(mujoco_env.MujocoEnv, utils.EzPickle):
+class Ant6ModifiedEnv(mujoco_env.MujocoEnv, utils.EzPickle):
     def __init__(self):
-        mujoco_env.MujocoEnv.__init__(self, 'ant.xml', 5)
+        mujoco_env.MujocoEnv.__init__(self, 'ant6_modified.xml', 5)
         utils.EzPickle.__init__(self)
 
 
-
     def step(self, a):
-        #a = a / 30.
         xposbefore = self.get_body_com("torso")[0]
         self.do_simulation(a, self.frame_skip)
         xposafter = self.get_body_com("torso")[0]
         forward_reward = (xposafter - xposbefore)/self.dt
         ctrl_cost = 0.01 * np.square(a).sum()
-        contact_cost = 0.01 * np.sum(
+        contact_cost = 0.05 * np.sum(
             np.square(np.clip(self.sim.data.cfrc_ext, -1, 1)))
-        survive_reward = 0.05
+        survive_reward = 0.1
         state = self.state_vector()
         notdone = np.isfinite(state).all() \
             and state[2] >= 0.3 and state[2] <= 1.0
@@ -33,7 +31,7 @@ class AntEnv(mujoco_env.MujocoEnv, utils.EzPickle):
 
     def get_current_obs(self):
         return np.concatenate([
-            self.sim.data.qpos.flat[2:],
+            self.sim.data.qpos.flat,
             self.sim.data.qvel.flat,
             np.clip(self.sim.data.cfrc_ext, -1, 1).flat,
             self.data.get_body_xmat("torso").flat,
@@ -45,6 +43,7 @@ class AntEnv(mujoco_env.MujocoEnv, utils.EzPickle):
             self.sim.data.qvel.flat,
             np.clip(self.sim.data.cfrc_ext, -1, 1).flat,
         ])
+
 
     def reset_model(self):
         qpos = self.init_qpos + self.np_random.uniform(size=self.model.nq, low=-.1, high=.1)

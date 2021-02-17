@@ -19,7 +19,7 @@ class GaussianPolicy:
             
 
             w1 = tf.get_variable("w1", shape=[state_len, hidden_sizes], dtype=tf.float32, 
-                initializer=tf.random_uniform_initializer(-math.sqrt(6.0 / (state_len + hidden_sizes)), math.sqrt(6.0 / (state_len + hidden_sizes)), dtype=tf.float32),
+                initializer=tf.random_uniform_initializer(-math.sqrt(1.0 / (state_len + hidden_sizes)), math.sqrt(1.0 / (state_len + hidden_sizes)), dtype=tf.float32),
                 trainable=True)
             b1 = tf.get_variable("b1", shape=[hidden_sizes], dtype=tf.float32, 
                 initializer=tf.zeros_initializer(dtype=tf.float32),
@@ -31,7 +31,7 @@ class GaussianPolicy:
 
 
             w2 = tf.get_variable("w2", shape=[hidden_sizes, hidden_sizes], dtype=tf.float32, 
-                initializer=tf.random_uniform_initializer(-math.sqrt(6.0 / (hidden_sizes + hidden_sizes)), math.sqrt(6.0 / (hidden_sizes + hidden_sizes)), dtype=tf.float32),
+                initializer=tf.random_uniform_initializer(-math.sqrt(1.0 / (hidden_sizes + hidden_sizes)), math.sqrt(1.0 / (hidden_sizes + hidden_sizes)), dtype=tf.float32),
                 trainable=True)
             b2 = tf.get_variable("b2", shape=[hidden_sizes], dtype=tf.float32, 
                 initializer=tf.zeros_initializer(dtype=tf.float32),
@@ -43,7 +43,7 @@ class GaussianPolicy:
 
 
             w3 = tf.get_variable("w3", shape=[hidden_sizes, action_len * 2], dtype=tf.float32, 
-                initializer=tf.random_uniform_initializer(-math.sqrt(6.0 / (hidden_sizes + action_len * 2)), math.sqrt(6.0 / (hidden_sizes + action_len * 2)), dtype=tf.float32),
+                initializer=tf.random_uniform_initializer(-math.sqrt(1.0 / (hidden_sizes + action_len * 2)), math.sqrt(1.0 / (hidden_sizes + action_len * 2)), dtype=tf.float32),
                 trainable=True)
             b3 = tf.get_variable("b3", shape=[action_len * 2], dtype=tf.float32, 
                 initializer=tf.zeros_initializer(dtype=tf.float32),
@@ -54,7 +54,7 @@ class GaussianPolicy:
             self.reg = reg
 
             self.mu, self.logsig = tf.split(fc3, [action_len, action_len], 1)
-            self.logsig = tf.clip_by_value(self.logsig, -20, 2)
+            #self.logsig = tf.clip_by_value(self.logsig, -20, 2)
             self.logsig_walk = tf.clip_by_value(self.logsig, -5, -1)
 
 
@@ -62,6 +62,7 @@ class GaussianPolicy:
             self.dist = ds.MultivariateNormalDiag(loc=self.mu, scale_diag=tf.exp(self.logsig))
             self.random_walk = ds.MultivariateNormalDiag(loc=self.mu, scale_diag=tf.exp(self.logsig_walk))
             self.x = self.dist.sample()
+            self.walk = self.random_walk.sample()
             self.squashed_walk =  tf.tanh(self.random_walk.sample())
             self.squashed_x = tf.tanh(self.x)
             self.squashed_mu = tf.tanh(self.mu)
@@ -72,6 +73,12 @@ class GaussianPolicy:
             self.regularization_loss =  0.001 * tf.reduce_sum( tf.reduce_mean(self.mu ** 2) + tf.reduce_mean(self.logsig ** 2))
 
             self.trainable_params = [w1, b1, w2, b2, w3, b3]
+
+    def log_li(self, x):
+        return tf.clip_by_value(self.dist.prob(x), -10., 0.)
  
     def squash_correction(self, actions):
         return tf.reduce_sum(tf.log(1 - actions ** 2 + EPS), axis=1)
+
+    def build_assign(self, source):
+        return [ tf.assign(target, source) for target, source in zip(self.trainable_params, source.trainable_params)]
