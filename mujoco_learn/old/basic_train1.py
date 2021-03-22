@@ -5,18 +5,19 @@ import random
 import gym.envs.mujoco  
 import time
 from gym.envs.mujoco.ant import AntEnv
+from gym.envs.mujoco.ant6 import Ant6Env
 from dummyenv import DummyEnv
 
 from networks.sac_learner import SACLearner
 
-env = DummyEnv()
+env = Ant6Env()
 state_dim = env.get_current_obs().size
 action_dim = env.action_space.shape[0]
 
 print("state_dim", state_dim)
 print("action_dim", action_dim)
 
-LOG_DIR = "data/basic_dummy1/"
+LOG_DIR = "data/basic_train4/"
 log_file = open(LOG_DIR + "log.txt", "wt")
 
 learner = SACLearner(state_dim, action_dim)
@@ -59,7 +60,7 @@ with sess.as_default():
 
 
         state = env.reset()
-        
+        '''
         rewards = 0.
         for play in range(200):
             action = learner.get_action_deterministic(state)[0]
@@ -73,7 +74,7 @@ with sess.as_default():
                 break
         reward_disc = rewards
         print("Epoch Discrete : " + str(epoch) + "\tStep: " + str(play) + "\tReward: " + str(rewards))
-        
+        '''
         for _ in range(8):
             rewards = 0.
             state = env.reset()
@@ -122,8 +123,8 @@ with sess.as_default():
         qs = []
         vs = []
         ps = []
-        for history in range(64):
-            dic = random.sample(range(veclen), 32)
+        for history in range(32):
+            dic = random.sample(range(veclen), 500)
 
             state_vector_dic = [state_vector[x] for x in dic]
             next_state_vector_dic = [next_state_vector[x] for x in dic]

@@ -12,7 +12,7 @@ class MORLLearner:
         policy_lr=0.001, policy_hidden_len=64, 
         qvalue_lr = 0.01, qvalue_hidden_len = 64, 
         state_lr=0.01, state_hidden_len=128, 
-        gamma=0.95, action_maximum=1.0, update_kl_div=1e-4):
+        gamma=0.95, action_maximum=1.0, update_kl_div=1e-2):
 
         self.action_maximum = action_maximum
         self.learning_rate = 0.01
@@ -45,18 +45,19 @@ class MORLLearner:
             self.poilcy_initialize = [ tf.assign(target, source) 
                 for target, source in zip(self.new_policy_network.trainable_params, self.policy_network.trainable_params)]
             self.qvalue_policy_network = MLP("qvalue", state_len, 1, qvalue_hidden_len, hidden_nonlinearity=tf.nn.leaky_relu, reuse=True,
-                input_tensor=self.input_state, additional_input=True, additional_input_dim=action_len, additional_input_tensor=self.policy_network.layer_output_action )
+                input_tensor=self.input_state, additional_input=True, additional_input_dim=action_len, additional_input_tensor=self.new_policy_network.layer_output_action )
+            self.qvalue_policy_std_network = MLP("qvalue", state_len, 1, qvalue_hidden_len, hidden_nonlinearity=tf.nn.leaky_relu, reuse=True,
+                input_tensor=self.input_state, additional_input=True, additional_input_dim=action_len, additional_input_tensor=self.new_policy_network.get_dist(self.input_action_std) )
 
             self.state_loss = tf.reduce_mean((self.state_network.layer_output_state - self.input_next_state) ** 2)
             self.reward_loss = tf.reduce_mean((self.state_network.layer_output_reward - self.input_reward) ** 2)
             self.state_train = tf.train.AdamOptimizer(state_lr).minimize(loss = self.state_loss + self.reward_loss, var_list = self.state_network.trainable_params)
 
-            self.qvalue_loss = tf.reduce_mean((self.qvalue_network.layer_output - self.input_qvalue) ** 2)
+            self.qvalue_loss = tf.reduce_mean(tf.nn.leaky_relu((self.input_qvalue - self.qvalue_network.layer_output)) ** 2)
             self.qvalue_train = tf.train.AdamOptimizer(qvalue_lr).minimize(loss = self.qvalue_loss, var_list = self.qvalue_network.trainable_params)
 
-            self.policy_loss = tf.reduce_mean( ((self.new_policy_network.layer_output_action - self.input_action) ** 2) / (self.input_action_std + 1e-6)
-                 * self.input_advantage )
-            self.policy_train = tf.train.GradientDescentOptimizer(self.input_learning_rate).minimize(loss = self.policy_loss, var_list = self.new_policy_network.trainable_params)
+            self.policy_loss = tf.reduce_mean( -self.qvalue_policy_std_network.layer_output + self.new_policy_network.regularization_loss)
+            self.policy_train = tf.train.AdamOptimizer(self.input_learning_rate).minimize(loss = self.policy_loss, var_list = self.new_policy_network.trainable_params)
 
             self.kl_div = tf.reduce_mean(tf.square(self.policy_network.layer_output_action - self.new_policy_network.layer_output_action) )
             self.policy_update = [ tf.assign(target, source)
@@ -74,14 +75,14 @@ class MORLLearner:
                 self.input_qvalue : input_qvalue} )
         return loss
 
-    def optimize_policy_batch(self, input_action_std, input_state, input_action, input_advantage):
+    def optimize_policy_batch(self, input_state, input_action_std):
         sess = tf.get_default_session()
         overfitted = False
         while True:
             sess.run(self.poilcy_initialize)
-            _, loss = sess.run([self.policy_train, self.policy_loss], {self.input_state : np.array(input_state), self.input_action : np.array(input_action),
-                    self.input_advantage : np.array(input_advantage), self.input_learning_rate : self.learning_rate, self.input_action_std : input_action_std} )
-            div = sess.run(self.kl_div, {self.input_state : np.array(input_state), self.input_action : np.array(input_action)})
+            _, loss = sess.run([self.policy_train, self.policy_loss], {self.input_state : np.array(input_state), self.input_learning_rate : self.learning_rate,
+                self.input_action_std : input_action_std} )
+            div = sess.run(self.kl_div, {self.input_state : np.array(input_state)})
             print("Policy_lr: " + str(self.learning_rate) + " Loss:" + str(loss) + " Divergence:" + str(div) )
             if div > self.update_kl_div or np.isnan(div):
                 overfitted = True

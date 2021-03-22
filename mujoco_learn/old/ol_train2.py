@@ -160,8 +160,8 @@ with sess.as_default():
 
 
                     for i in range(len(trpolearners))
-                        state_corr[i] += trpolearners[i].get_nextstate_diff(prevstate, action, state)[0]
-                    state_corr[len(trpolearners)] += mamllearner.get_nextstate_diff(prevstate, action, state)[0]
+                        state_corr[i] += trpolearners[i].get_next_diff(prevstate, action, state)[0]
+                    state_corr[len(trpolearners)] += mamllearner.get_next_diff(prevstate, action, state)[0]
 
                     curreward += reward
                     if(done):
@@ -220,10 +220,10 @@ with sess.as_default():
             state_corr /= np.sum(state_corr)
             print("Prob : " + str(state_corr))
 
-                v = learner.optimize_value_batch(state_vector, nextstate_vector, value_vector)
-                log_loss_value += v
-                n = learner.optimize_nextstate_batch(state_vector, action_vector, nextstate_vector)
-                log_loss_nextstate += n
+            for i in range(len(trpolearners))
+                learner.optimize_value_batch(state_corr[i] * 0.01, state_vector, nextstate_vector, value_vector)
+                learner.optimize_nextstate_batch(state_corr[i] * 0.01, state_vector, action_vector, nextstate_vector)
+
             log_loss_value /= 32
             log_loss_nextstate /= 32
             print("Value loss " + str(log_loss_value))

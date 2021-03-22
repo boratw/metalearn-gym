@@ -8,11 +8,12 @@ from .gaussian_policy import GaussianPolicy
 
 class SACLearner:
     def __init__(self, state_len, action_len, name="", 
-        value_hidden_len=256, qvalue_hidden_len=256, policy_hidden_len=256,
-        value_lr=0.0001, qvalue_lr=0.0001, policy_lr=0.0001, gamma=0.96):
+        state_hidden_len=256, value_hidden_len=256, qvalue_hidden_len=256, policy_hidden_len=256,
+        state_lr=0.001, value_lr=0.0001, qvalue_lr=0.0001, policy_lr=0.0001, gamma=0.96):
 
+        self.scope = "SACLearner" + name
 
-        with tf.variable_scope("SACLearner" + name): 
+        with tf.variable_scope(self.scope): 
             self.input_reward = tf.placeholder(tf.float32, [None, 1], name="input_reward")
             self.input_state = tf.placeholder(tf.float32, [None, state_len], name="input_state")
             self.input_next_state = tf.placeholder(tf.float32, [None, state_len], name="input_next_state")
@@ -20,9 +21,12 @@ class SACLearner:
             self.input_survive = tf.placeholder(tf.float32, [None, 1], name="input_survive")
             self.input_value = tf.placeholder(tf.float32, [None, 1], name="input_value")
 
+            self.state_network = MLP("state", state_len, state_len, state_hidden_len, input_tensor=self.input_state,
+                hidden_nonlinearity=tf.nn.leaky_relu, additional_input=True, additional_input_dim=action_len, additional_input_tensor=self.input_action)
+
             self.value_network = MLP("value", state_len, 1, value_hidden_len, input_tensor=self.input_state,
                 hidden_nonlinearity=tf.nn.leaky_relu)
-            self.value_target_network = MLP("tvalue", state_len, 1, value_hidden_len, input_tensor=self.input_next_state,
+            self.value_target_network = MLP("tvalue", state_len, 1, value_hidden_len, input_tensor=self.state_network.layer_output,
                 hidden_nonlinearity=tf.nn.leaky_relu)
 
             self.qvalue1_network = MLP("qvalue1", state_len, 1, qvalue_hidden_len, hidden_nonlinearity=tf.nn.leaky_relu,
@@ -32,7 +36,7 @@ class SACLearner:
                 input_tensor=self.input_state, additional_input=True, additional_input_dim=action_len, additional_input_tensor=self.input_action)
 
             self.policy_network = GaussianPolicy("policy", state_len, action_len, input_tensor=self.input_state,
-                hidden_nonlinearity=tf.nn.leaky_relu)
+                hidden_nonlinearity=tf.nn.tanh)
 
             self.qvalue1_network_forpolicy = MLP("qvalue1", state_len, 1, qvalue_hidden_len, hidden_nonlinearity=tf.nn.leaky_relu, reuse=True,
                 input_tensor=self.input_state, additional_input=True, additional_input_dim=action_len,
@@ -44,6 +48,10 @@ class SACLearner:
 
             #self.policy_prior = tf.contrib.distributions.MultivariateNormalDiag(loc=tf.zeros(action_len), scale_diag=tf.ones(action_len))
             #self.policy_prior_log_probs = self.policy_prior.log_prob(self.policy_network.squashed_x)
+
+            self.state_loss = tf.reduce_mean((self.input_next_state - self.state_network.layer_output) ** 2)
+            self.state_train = tf.train.AdamOptimizer(state_lr).minimize(self.state_loss,
+                var_list = self.state_network.trainable_params)
 
             self.value_assign = self.value_target_network.build_add_weighted(self.value_network, 0.1)
 
@@ -93,6 +101,12 @@ class SACLearner:
         output = sess.run(self.policy_network.squashed_walk, {self.input_state : np.array(input_state)})
         return output
 
+    def get_next_state(self, input_state, input_action):
+        sess = tf.get_default_session()
+        output = sess.run(self.state_network.layer_output, {self.input_state : np.array([input_state]), self.input_action : np.array([input_action])})
+        return output[0]
+
+
     def get_value_correlation(self, input_state, input_value):
         sess = tf.get_default_session()
         output = sess.run(self.value_corr, {self.input_state : np.array(input_state), self.input_value : np.array(input_value)})
@@ -109,20 +123,22 @@ class SACLearner:
             self.input_action : np.array([input_action]), self.input_reward : np.array([input_reward]), self.input_survive : np.array([input_survive])}
 
         sess = tf.get_default_session()
-        q, v, p, _, _, _, _ = sess.run([self.qvalue1_network.layer_output, self.value_target_network.layer_output, self.policy_network.log_pi, 
-            self.qvalue1_train, self.qvalue2_train,  self.policy_train, self.value_train ], input_list)
+        q, v, p = sess.run([self.qvalue1_network.layer_output, self.value_target_network.layer_output, self.policy_network.log_pi], input_list)
+        ql, vl, pl, sl, _, _, _, _, _ = sess.run([self.qvalue1_loss, self.value_loss, self.policy_loss, self.state_loss,
+            self.qvalue1_train, self.qvalue2_train,  self.policy_train, self.value_train, self.state_train], input_list)
 
-        return q, v, p
+        return q, v, p, ql, vl, pl, sl
 
     def optimize_batch(self, input_state, input_next_state, input_action, input_reward, input_survive):
         input_list = {self.input_state : np.array(input_state), self.input_next_state : np.array(input_next_state), 
             self.input_action : np.array(input_action), self.input_reward : np.array(input_reward), self.input_survive : np.array(input_survive)}
 
         sess = tf.get_default_session()
-        q, v, p, _, _, _, _ = sess.run([self.qvalue1_network.layer_output, self.value_target_network.layer_output, self.policy_network.log_pi, 
-            self.qvalue1_train, self.qvalue2_train,  self.policy_train, self.value_train ], input_list)
+        q, v, p = sess.run([self.qvalue1_network.layer_output, self.value_target_network.layer_output, self.policy_network.log_pi], input_list)
+        ql, vl, pl, sl, _, _, _, _, _ = sess.run([self.qvalue1_loss, self.value_loss, self.policy_loss, self.state_loss,
+            self.qvalue1_train, self.qvalue2_train,  self.policy_train, self.value_train, self.state_train], input_list)
 
-        return q, v, p
+        return q, v, p, ql, vl, pl, sl
 
     def value_network_initialize(self):
         value_init = self.value_target_network.build_add_weighted(self.value_network, 1.0)
@@ -134,3 +150,19 @@ class SACLearner:
     def value_network_update(self):
         sess = tf.get_default_session()
         sess.run(self.value_assign)
+
+    def init_from_other(self, source):
+        sess = tf.get_default_session()
+        state_update = [ tf.assign(target, source)
+                for target, source in zip(self.state_network.trainable_params, source.state_network.trainable_params)  ] 
+        value_update = [ tf.assign(target, source)
+                for target, source in zip(self.value_network.trainable_params, source.value_network.trainable_params)  ] 
+        qvalue1_update = [ tf.assign(target, source)
+                for target, source in zip(self.qvalue1_network.trainable_params, source.qvalue1_network.trainable_params)  ] 
+        qvalue2_update = [ tf.assign(target, source)
+                for target, source in zip(self.qvalue2_network.trainable_params, source.qvalue2_network.trainable_params)  ] 
+        policy_update = [ tf.assign(target, source)
+                for target, source in zip(self.policy_network.trainable_params, source.policy_network.trainable_params)  ] 
+                
+        sess.run(tf.variables_initializer(tf.global_variables(self.scope)))
+        sess.run([state_update, value_update, qvalue1_update, qvalue2_update, policy_update])

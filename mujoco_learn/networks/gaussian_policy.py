@@ -3,8 +3,6 @@ import numpy as np
 import tensorflow as tf
 import math
 
-from .mlp import MLP
-
 EPS = 1e-6
 
 class GaussianPolicy:
@@ -54,6 +52,7 @@ class GaussianPolicy:
             self.reg = reg
 
             self.mu, self.logsig = tf.split(fc3, [action_len, action_len], 1)
+            self.std = tf.exp(self.logsig)
             #self.logsig = tf.clip_by_value(self.logsig, -20, 2)
             self.logsig_walk = tf.clip_by_value(self.logsig, -5, -1)
 
@@ -75,7 +74,7 @@ class GaussianPolicy:
             self.trainable_params = [w1, b1, w2, b2, w3, b3]
 
     def log_li(self, x):
-        return tf.clip_by_value(self.dist.prob(x), -10., 0.)
+        return self.dist.log_prob(x)
  
     def squash_correction(self, actions):
         return tf.reduce_sum(tf.log(1 - actions ** 2 + EPS), axis=1)
