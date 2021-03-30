@@ -153,6 +153,7 @@ class SACLearner:
 
     def init_from_other(self, source):
         sess = tf.get_default_session()
+        '''
         state_update = [ tf.assign(target, source)
                 for target, source in zip(self.state_network.trainable_params, source.state_network.trainable_params)  ] 
         value_update = [ tf.assign(target, source)
@@ -166,3 +167,7 @@ class SACLearner:
                 
         sess.run(tf.variables_initializer(tf.global_variables(self.scope)))
         sess.run([state_update, value_update, qvalue1_update, qvalue2_update, policy_update])
+        '''
+        assign = [ tf.assign(target, source)
+                for target, source in zip(tf.global_variables(self.scope), tf.global_variables(source.scope))  ] 
+        sess.run(assign)

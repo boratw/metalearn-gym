@@ -19,51 +19,23 @@ def modifystr(s, length):
 
 def SetGoal(goal, name) :
     tree = elemTree.parse("../gym/envs/mujoco/assets/ant6.xml")
-    for body in tree.iter("body"):
-        if "name" in body.attrib:
-            if(body.attrib["name"] == "aux_1"):
-                geom = body.find("geom")
-                geom.attrib["fromto"] = modifystr(geom.attrib["fromto"], goal[0])
-                body2 = body.find("body")
-                body2.attrib["pos"] = modifystr(body2.attrib["pos"], goal[0])
-                geom = body2.find("geom")
-                geom.attrib["fromto"] = modifystr(geom.attrib["fromto"], goal[0])
-            if(body.attrib["name"] == "aux_2"):
-                geom = body.find("geom")
-                geom.attrib["fromto"] = modifystr(geom.attrib["fromto"], goal[1])
-                body2 = body.find("body")
-                body2.attrib["pos"] = modifystr(body2.attrib["pos"], goal[1])
-                geom = body2.find("geom")
-                geom.attrib["fromto"] = modifystr(geom.attrib["fromto"], goal[1])
-            if(body.attrib["name"] == "aux_3"):
-                geom = body.find("geom")
-                geom.attrib["fromto"] = modifystr(geom.attrib["fromto"], goal[2])
-                body2 = body.find("body")
-                body2.attrib["pos"] = modifystr(body2.attrib["pos"], goal[2])
-                geom = body2.find("geom")
-                geom.attrib["fromto"] = modifystr(geom.attrib["fromto"], goal[2])
-            if(body.attrib["name"] == "aux_4"):
-                geom = body.find("geom")
-                geom.attrib["fromto"] = modifystr(geom.attrib["fromto"], goal[3])
-                body2 = body.find("body")
-                body2.attrib["pos"] = modifystr(body2.attrib["pos"], goal[3])
-                geom = body2.find("geom")
-                geom.attrib["fromto"] = modifystr(geom.attrib["fromto"], goal[3])
-            if(body.attrib["name"] == "aux_5"):
-                geom = body.find("geom")
-                geom.attrib["fromto"] = modifystr(geom.attrib["fromto"], goal[4])
-                body2 = body.find("body")
-                body2.attrib["pos"] = modifystr(body2.attrib["pos"], goal[4])
-                geom = body2.find("geom")
-                geom.attrib["fromto"] = modifystr(geom.attrib["fromto"], goal[4])
-            if(body.attrib["name"] == "aux_6"):
-                geom = body.find("geom")
-                geom.attrib["fromto"] = modifystr(geom.attrib["fromto"], goal[5])
-                body2 = body.find("body")
-                body2.attrib["pos"] = modifystr(body2.attrib["pos"], goal[5])
-                geom = body2.find("geom")
-                geom.attrib["fromto"] = modifystr(geom.attrib["fromto"], goal[5])
-
+    for i in range(6):
+        for body in tree.iter("body"):
+            if "name" in body.attrib:
+                if(body.attrib["name"] == "aux_" + str(i + 1)):
+                    geom = body.find("geom")
+                    geom.attrib["fromto"] = modifystr(geom.attrib["fromto"], goal[i])
+                    body2 = body.find("body")
+                    body2.attrib["pos"] = modifystr(body2.attrib["pos"], goal[i])
+                    geom = body2.find("geom")
+                    geom.attrib["fromto"] = modifystr(geom.attrib["fromto"], goal[i])
+        if goal[i] == 0.01:
+            for body in tree.iter("motor"):
+                if "joint" in body.attrib:
+                    if(body.attrib["joint"] == "hip_" + str(i + 1)):
+                        body.attrib["gear"] = "0"
+                    if(body.attrib["joint"] == "ankle_" + str(i + 1)):
+                        body.attrib["gear"] = "0"
 
     tree.write("../gym/envs/mujoco/assets/" + name)
 
@@ -94,13 +66,14 @@ gamma = 0.96
 print("state_dim", state_dim)
 print("action_dim", action_dim)
 
-LOG_DIR = "data/sac_ol3/"
-log_file = open(LOG_DIR + "log.txt", "wt")
+LOG_DIR = "data/sac_ol7/"
+log_file = open(LOG_DIR + "log.txt", "at")
 
-learners = [SACLearner(state_dim, action_dim, name="0", value_lr=0.0005, qvalue_lr=0.0005, policy_lr=0.0005, gamma=gamma)]
+learners = [SACLearner(state_dim, action_dim, name="0", state_lr=0.0005, value_lr=0.0005, qvalue_lr=0.0005, policy_lr=0.0005, gamma=gamma)]
 agent_finding = [False]
 learner_len = 1
-baseline_score = 1.
+baseline_score = [ 1. ]
+newagent_wait = 0
 
 sess = tf.Session()
 saver = tf.train.Saver(max_to_keep=0)
@@ -109,6 +82,7 @@ with sess.as_default():
     init = tf.global_variables_initializer()
     sess.run(init)
     learners[0].value_network_initialize()
+    #saver.restore(sess, LOG_DIR + "log_Task_0_Epoch_1000.ckpt")
 
     vector_len = 0
     state_vector = []
@@ -125,7 +99,7 @@ with sess.as_default():
         #env.close()
         env = Ant6ModifiedEnv()
 
-        for epoch in range(1001):
+        for epoch in range(0, 1001):
             if epoch % 200 == 0:
                 record_image = True
             else:
@@ -171,34 +145,53 @@ with sess.as_default():
             state_score /= 8
             for agent in range(learner_len):
                 print("State Score " + str(agent) + " : " + str(state_score[agent]))
-            print("Baseline Score : " + str(baseline_score))
+            print("Baseline Score : " + str(baseline_score[cur_agent]))
         
 
 
-            qs = 0.
-            vs = 0.
-            ps = 0.
-            for history in range(32):
-                dic = random.sample(range(vector_len), 256 if vector_len > 256 else vector_len)
+            
+            if baseline_score[cur_agent] > state_score[cur_agent] or newagent_wait > 0:
+                if newagent_wait > 0:
+                    newagent_wait -= 1
+                baseline_score[cur_agent] = (baseline_score[cur_agent] * 0.95) + (state_score[cur_agent] * 0.075)
+                baseline_over -= 1
+                if baseline_over < 0:
+                    baseline_over = 0
+                    agent_finding = [False] * learner_len
 
-                state_vector_dic = [state_vector[x] for x in dic]
-                next_state_vector_dic = [next_state_vector[x] for x in dic]
-                action_vector_dic = [action_vector[x] for x in dic]
-                reward_vector_dic = [reward_vector[x] for x in dic]
-                survive_vector_dic = [survive_vector[x] for x in dic]
+                qs = 0.
+                vs = 0.
+                ps = 0.
+                for history in range(32):
+                    dic = random.sample(range(vector_len), 1024 if vector_len > 1024 else vector_len)
 
-                q, v, p, _, _, _, _ = learners[cur_agent].optimize_batch(state_vector_dic, next_state_vector_dic, action_vector_dic, reward_vector_dic, survive_vector_dic)
+                    state_vector_dic = [state_vector[x] for x in dic]
+                    next_state_vector_dic = [next_state_vector[x] for x in dic]
+                    action_vector_dic = [action_vector[x] for x in dic]
+                    reward_vector_dic = [reward_vector[x] for x in dic]
+                    survive_vector_dic = [survive_vector[x] for x in dic]
 
-                qs += np.mean(q)
-                vs += np.mean(v)
-                ps += np.mean(p)
+                    q, v, p, _, _, _, _ = learners[cur_agent].optimize_batch(state_vector_dic, next_state_vector_dic, action_vector_dic, reward_vector_dic, survive_vector_dic)
 
-            learners[cur_agent].value_network_update()
-            qs /= 32.
-            vs /= 32.
-            ps /= 32.
+                    qs += np.mean(q)
+                    vs += np.mean(v)
+                    ps += np.mean(p)
 
-            vec_trunc = vector_len // 10
+                learners[cur_agent].value_network_update()
+                qs /= 32.
+                vs /= 32.
+                ps /= 32.
+            else:
+                baseline_over += 1
+                if baseline_over > 3:
+                    baseline_over = 3
+
+                qs = 0.
+                vs = 0.
+                ps = 0.
+                        
+
+            vec_trunc = vector_len // 30
             state_vector = state_vector[vec_trunc:]
             next_state_vector = next_state_vector[vec_trunc:]
             action_vector = action_vector[vec_trunc:]
@@ -207,26 +200,12 @@ with sess.as_default():
             vector_len -= vec_trunc
 
 
-            log_file.write(str(taski) + "\t" + str(epoch) + "\t" + str(cur_agent) + "\t" + str(totalreward) + "\tLearner\t" + str(cur_agent) + "\t" + str(qs) + "\t" + str(vs) + "\t" + str(ps) + "\t" + str(baseline_score))
-            for s in state_score:
-                log_file.write("\t" + str(s))
+            log_file.write(str(taski) + "\t" + str(epoch) + "\t" + str(cur_agent) + "\t" + str(totalreward) + "\tLearner\t" + str(cur_agent) + "\t" + str(qs) + "\t" + str(vs) + "\t" + str(ps))
+            for agent in range(learner_len):
+                log_file.write("\t" + str(state_score[agent]) + "\t" + str(baseline_score[agent]))
             log_file.write("\n")
             
 
-            maximum_learner = np.argmin(state_score)
-            
-            if baseline_score > state_score[maximum_learner]:
-                baseline_score = (baseline_score * 0.95) + (state_score[maximum_learner] * 0.075)
-
-            if baseline_score < state_score[cur_agent]:
-                baseline_over += 1
-                if baseline_over > 3:
-                    baseline_over = 3
-            else:
-                baseline_over -= 1
-                if baseline_over < 0:
-                    baseline_over = 0
-                    agent_finding = [False] * learner_len
             
             if baseline_over >= 3:
                 baseline_over = 0
@@ -238,16 +217,24 @@ with sess.as_default():
                         cur_agent = agent
                         min_value = state_score[agent]
                 if cur_agent == -1:
-                    learners.append( SACLearner(state_dim, action_dim, name=str(learner_len), value_lr=0.0005, qvalue_lr=0.0005, policy_lr=0.0005, gamma=gamma) )
+                    maximum_learner = np.argmin(state_score)
+                    learners.append( SACLearner(state_dim, action_dim, name=str(learner_len), state_lr=0.0005, value_lr=0.0005, qvalue_lr=0.0005, policy_lr=0.0005, gamma=gamma) )
                     cur_agent = learner_len
                     learner_len += 1
                     learners[-1].init_from_other(learners[maximum_learner])
                     agent_finding = [False] * learner_len
+                    baseline_score.append(state_score[maximum_learner] * 1.5)
+                    newagent_wait = 50
+                    
+                vector_len = 0
+                state_vector = []
+                next_state_vector = []
+                action_vector = []
+                reward_vector = []
+                survive_vector = []
 
-                    baseline_score = state_score[maximum_learner] * 1.5
 
-
-            if epoch == 2000:
+            if epoch == 1000:
                 saver.save(sess, LOG_DIR + "log_Task_" + str(taski) + "_Epoch_" + str(epoch) + ".ckpt")
 
             if record_image:
